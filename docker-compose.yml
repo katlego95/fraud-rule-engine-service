@@ -1,0 +1,29 @@
+services:
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_DB: fraud
+      POSTGRES_USER: fraud
+      POSTGRES_PASSWORD: fraud
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fraud -d fraud"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  app:
+    build: .
+    depends_on:
+      postgres:
+        # Gated on the health check, not on start order: Flyway against an unready database
+        # fails the application, and "it worked the second time" is not a deployment story.
+        condition: service_healthy
+    environment:
+      DATABASE_URL: jdbc:postgresql://postgres:5432/fraud
+      DATABASE_USERNAME: fraud
+      DATABASE_PASSWORD: fraud
+      SPRING_PROFILES_ACTIVE: demo
+    ports:
+      - "8080:8080"
