@@ -18,6 +18,10 @@ docker compose up --build
 
 Ready in about five seconds, with 1,276 seeded legitimate transactions and four labelled fraud scenarios.
 
+> `./mvnw verify` needs a running Docker daemon — integration tests use
+> Testcontainers against real PostgreSQL. `./mvnw test` runs the 44 unit
+> tests without it.
+
 <details>
 <summary>Build, standalone Docker, and tests</summary>
 
@@ -35,7 +39,7 @@ docker run --rm -p 8080:8080 \
 ./mvnw verify    # full 93, needs Docker for Testcontainers
 ```
 
-Without a reachable database the service fails in ten seconds with a readable message, not a stack trace.
+Without a reachable database the service fails within about fifteen seconds with a readable message, not a stack trace.
 
 </details>
 
