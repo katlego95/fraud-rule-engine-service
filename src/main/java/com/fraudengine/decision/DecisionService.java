@@ -64,8 +64,9 @@ public class DecisionService {
     public DecisionResult decide(TransactionEvent event) {
         String hash = payloadHash.of(event);
 
-        // Device and IP identifiers are hashed before they touch the database; nothing queries
-        // them, so plaintext buys nothing and costs blast radius. See ADR 0005.
+        // Device and IP identifiers are hashed before they touch the database. The hash is
+        // deterministic, so the spread rules still group and count by identifier; what a database
+        // compromise yields is reduced without costing the queries. See ADR 0005 and ADR 0008.
         if (!events.insertIfAbsent(privacy.forStorage(event), hash)) {
             metrics.recordReplayed();
             return replay(event, hash);
