@@ -70,11 +70,15 @@ public class VelocityRepository {
                 .single();
     }
 
-     // How many distinct cards have been seen from this IP in the window, including the current event's card
+    /**
+     * Distinct cards seen from one IP in the window, including the card being evaluated. The
+     * column stores a fingerprint, hence the parameter name; the column itself keeps the name of
+     * the thing it holds.
+     */
     public long countDistinctCardsForIp(String ipFingerprint, Instant from, Instant to) {
         return jdbc.sql("""
                 select count(distinct card_token) from transaction_events
-                where ip_fingerprint = :ipFingerprint and card_token = :cardToken and occurred_at between :from and :to
+                where ip_address = :ipFingerprint and occurred_at between :from and :to
                 """)
                 .param("ipFingerprint", ipFingerprint)
                 .param("from", at(from))
@@ -83,11 +87,11 @@ public class VelocityRepository {
                 .single();
     }
 
-    // how many distinct accounts have been seen from this device in the window, including the current event's account
+    /** Distinct accounts seen from one device in the window, including the account being evaluated. */
     public long countDistinctAccountsForDevice(String deviceFingerprint, Instant from, Instant to) {
         return jdbc.sql("""
                 select count(distinct account_id) from transaction_events
-                where device_fingerprint = :deviceFingerprint and occurred_at between :from and :to
+                where device_id = :deviceFingerprint and occurred_at between :from and :to
                 """)
                 .param("deviceFingerprint", deviceFingerprint)
                 .param("from", at(from))
