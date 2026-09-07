@@ -47,10 +47,10 @@ class RuleController {
     /** Creates a rule, or the next version of an existing code. Never mutates a prior version. */
     @PostMapping
     RuleResponse create(@Valid @RequestBody CreateRule request) {
-        return RuleResponse.from(rules.insertNextVersion(new Rule(
-                null, request.code(), 0, request.type(), request.mode(), request.nature(),
+        return RuleResponse.from(rules.insertNextVersion(Rule.definition(
+                request.code(), request.type(), request.mode(), request.nature(),
                 request.verdict(), request.weight(), request.parameters(), request.description(),
-                request.typology(), null, null)));
+                request.typology())));
     }
 
     /**
