@@ -24,15 +24,24 @@ class RuleRepositoryIT extends PostgresIntegrationTest {
     @Autowired
     private JdbcClient jdbc;
 
+    /**
+     * Asserts what must be true of every evaluable rule, not how many there are. A census —
+     * "there are exactly eight, and here they are" — has to be edited every time a rule is added,
+     * and its failure message tells you the new number, so it gets updated without thought. These
+     * assertions hold for eight rules and for eight thousand.
+     *
+     * <p>The baseline check is deliberately {@code contains} and not {@code containsExactly}:
+     * adding a rule is routine and should not fail the build, but a seeded rule silently
+     * disappearing is a fraud control switched off and must.
+     */
     @Test
-    void seedsEightRulesAllCurrentAndEvaluable() {
+    void everyEvaluableRuleIsCurrentAndDocumented() {
         List<Rule> evaluable = repository.findEvaluable();
 
-        assertThat(evaluable).hasSize(8);
-        assertThat(evaluable).extracting(Rule::code).containsExactlyInAnyOrder(
+        assertThat(evaluable).extracting(Rule::code).contains(
                 "HIGH_AMOUNT", "HIGH_RISK_MCC", "BLOCKED_COUNTRY", "CNP_HIGH_AMOUNT",
                 "CARD_TXN_VELOCITY", "MERCHANT_SPREAD_VELOCITY", "ACCOUNT_AMOUNT_VELOCITY",
-                "GEO_IMPOSSIBLE");
+                "GEO_IMPOSSIBLE", "IP_CARD_SPREAD", "DEVICE_ACCOUNT_SPREAD");
         assertThat(evaluable).allSatisfy(rule -> {
             assertThat(rule.supersededAt()).isNull();
             assertThat(rule.description()).isNotBlank();
@@ -78,6 +87,7 @@ class RuleRepositoryIT extends PostgresIntegrationTest {
     @Test
     void newVersionSupersedesThePriorOneAndIncrements() {
         Rule original = current("HIGH_AMOUNT");
+        int evaluableBefore = repository.findEvaluable().size();
 
         Rule updated = repository.insertNextVersion(new Rule(
                 null, "HIGH_AMOUNT", 0, RuleType.AMOUNT_THRESHOLD, RuleMode.ACTIVE,
@@ -88,7 +98,10 @@ class RuleRepositoryIT extends PostgresIntegrationTest {
         assertThat(updated.supersededAt()).isNull();
         assertThat(repository.findById(original.id()).orElseThrow().supersededAt()).isNotNull();
         assertThat(repository.findHistory("HIGH_AMOUNT")).hasSize(2);
-        assertThat(repository.findEvaluable()).hasSize(8);
+
+        // The point is that a new version replaces its predecessor rather than joining it, so the
+        // relationship is what matters: the evaluation set is the same size, not that it is eight.
+        assertThat(repository.findEvaluable()).hasSize(evaluableBefore);
     }
 
     @Test
@@ -103,10 +116,16 @@ class RuleRepositoryIT extends PostgresIntegrationTest {
 
     @Test
     void disabledRuleLeavesTheEvaluationSet() {
+        int evaluableBefore = repository.findEvaluable().size();
+        int currentBefore = repository.findCurrent().size();
+
         repository.changeMode(current("HIGH_AMOUNT").id(), RuleMode.DISABLED);
 
-        assertThat(repository.findEvaluable()).hasSize(7);
-        assertThat(repository.findCurrent()).hasSize(8);
+        // Disabling removes exactly one rule from evaluation and none from history: the rule still
+        // exists and is still current, it just no longer runs. Asserting the delta says that;
+        // asserting "seven" only says it while there happen to be eight.
+        assertThat(repository.findEvaluable()).hasSize(evaluableBefore - 1);
+        assertThat(repository.findCurrent()).hasSize(currentBefore);
     }
 
     @Test
