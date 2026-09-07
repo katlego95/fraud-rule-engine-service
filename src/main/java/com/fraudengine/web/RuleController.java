@@ -6,6 +6,7 @@ import com.fraudengine.domain.RuleNature;
 import com.fraudengine.domain.RuleType;
 import com.fraudengine.domain.Verdict;
 import com.fraudengine.rules.RuleRepository;
+import com.fraudengine.rules.RuleValidator;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -25,9 +26,11 @@ import org.springframework.web.bind.annotation.RestController;
 class RuleController {
 
     private final RuleRepository rules;
+    private final RuleValidator validator;
 
-    RuleController(RuleRepository rules) {
+    RuleController(RuleRepository rules, RuleValidator validator) {
         this.rules = rules;
+        this.validator = validator;
     }
 
     @GetMapping
@@ -44,13 +47,21 @@ class RuleController {
         return versions.stream().map(RuleResponse::from).toList();
     }
 
-    /** Creates a rule, or the next version of an existing code. Never mutates a prior version. */
+    /**
+     * Creates a rule, or the next version of an existing code. Never mutates a prior version.
+     *
+     * <p>Parameters are parsed before the insert. The same parse happens at decision time, so
+     * skipping it here only defers the failure to the next transaction, where it is a 500 for a
+     * caller who did nothing wrong.
+     */
     @PostMapping
     RuleResponse create(@Valid @RequestBody CreateRule request) {
-        return RuleResponse.from(rules.insertNextVersion(Rule.definition(
-                request.code(), request.type(), request.mode(), request.nature(),
-                request.verdict(), request.weight(), request.parameters(), request.description(),
-                request.typology())));
+        Rule definition = Rule.definition(request.code(), request.type(), request.mode(),
+                request.nature(), request.verdict(), request.weight(), request.parameters(),
+                request.description(), request.typology());
+
+        validator.validate(definition);
+        return RuleResponse.from(rules.insertNextVersion(definition));
     }
 
     /**
