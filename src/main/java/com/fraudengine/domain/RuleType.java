@@ -17,5 +17,11 @@ public enum RuleType {
     CARD_COUNT_VELOCITY,
     MERCHANT_SPREAD_VELOCITY,
     ACCOUNT_AMOUNT_VELOCITY,
-    GEO_SPEED
+    GEO_SPEED,
+
+    // The two below count distinct identifiers seen from one source, rather than activity on one
+    // card. They read device_id and ip_address, which are stored hashed, so their evaluators must
+    // fingerprint the incoming value before querying. See EventPrivacy and ADR 0005.
+    IP_CARD_SPREAD_VELOCITY,
+    DEVICE_ACCOUNT_SPREAD_VELOCITY
 }
