@@ -4,6 +4,7 @@ import com.fraudengine.decision.IdempotencyConflictException;
 import com.fraudengine.decision.InvalidCursorException;
 import com.fraudengine.rules.InvalidRuleDefinitionException;
 import com.fraudengine.rules.InvalidRuleParametersException;
+import com.fraudengine.rules.RuleNotFoundException;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import org.springframework.http.HttpStatus;
@@ -60,6 +61,13 @@ class ApiExceptionHandler {
     ProblemDetail onDecisionNotFound(DecisionNotFoundException e) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, e.getMessage());
         problem.setTitle("Decision not found");
+        return problem;
+    }
+
+    @ExceptionHandler(RuleNotFoundException.class)
+    ProblemDetail onRuleNotFound(RuleNotFoundException e) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, e.getMessage());
+        problem.setTitle("Rule not found");
         return problem;
     }
 

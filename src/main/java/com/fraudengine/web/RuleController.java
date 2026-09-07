@@ -5,6 +5,7 @@ import com.fraudengine.domain.RuleMode;
 import com.fraudengine.domain.RuleNature;
 import com.fraudengine.domain.RuleType;
 import com.fraudengine.domain.Verdict;
+import com.fraudengine.rules.RuleNotFoundException;
 import com.fraudengine.rules.RuleRepository;
 import com.fraudengine.rules.RuleValidator;
 import jakarta.validation.Valid;
@@ -42,7 +43,7 @@ class RuleController {
     List<RuleResponse> history(@PathVariable String code) {
         List<Rule> versions = rules.findHistory(code);
         if (versions.isEmpty()) {
-            throw new DecisionNotFoundException("No rule with code " + code);
+            throw new RuleNotFoundException(code);
         }
         return versions.stream().map(RuleResponse::from).toList();
     }
