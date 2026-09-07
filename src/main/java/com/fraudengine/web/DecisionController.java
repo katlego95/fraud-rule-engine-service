@@ -9,6 +9,7 @@ import com.fraudengine.domain.Decision;
 import com.fraudengine.domain.TransactionEvent;
 import com.fraudengine.domain.Verdict;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Size;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
@@ -52,9 +53,14 @@ class DecisionController {
      * one rejected item does not discard the decisions already made for the others. That matches
      * the semantics of the single endpoint being called repeatedly, which is what a caller
      * replaying a sequence expects.
+     *
+     * <p>Capped at 500. Decided sequentially on one thread, so 10,000 events measured 35 seconds
+     * and were accepted without complaint; at ~287 events/s this bounds a request to under two
+     * seconds. See docs/load-test.md.
      */
     @PostMapping("/decisions/batch")
-    List<DecisionResponse> decideBatch(@Valid @RequestBody List<@Valid TransactionEvent> events) {
+    List<DecisionResponse> decideBatch(
+            @Valid @RequestBody @Size(max = 500) List<@Valid TransactionEvent> events) {
         return events.stream()
                 .sorted(Comparator.comparing(TransactionEvent::occurredAt))
                 .map(service::decide)
