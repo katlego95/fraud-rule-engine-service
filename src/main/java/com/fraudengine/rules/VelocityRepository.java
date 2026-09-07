@@ -70,6 +70,33 @@ public class VelocityRepository {
                 .single();
     }
 
+     // How many distinct cards have been seen from this IP in the window, including the current event's card
+    public long countDistinctCardsForIp(String ipFingerprint, Instant from, Instant to) {
+        return jdbc.sql("""
+                select count(distinct card_token) from transaction_events
+                where ip_fingerprint = :ipFingerprint and card_token = :cardToken and occurred_at between :from and :to
+                """)
+                .param("ipFingerprint", ipFingerprint)
+                .param("from", at(from))
+                .param("to", at(to))
+                .query(Long.class)
+                .single();
+    }
+
+    // how many distinct accounts have been seen from this device in the window, including the current event's account
+    public long countDistinctAccountsForDevice(String deviceFingerprint, Instant from, Instant to) {
+        return jdbc.sql("""
+                select count(distinct account_id) from transaction_events
+                where device_fingerprint = :deviceFingerprint and occurred_at between :from and :to
+                """)
+                .param("deviceFingerprint", deviceFingerprint)
+                .param("from", at(from))
+                .param("to", at(to))
+                .query(Long.class)
+                .single();
+    }
+
+
     /**
      * Positions on this card within the window, excluding the event being evaluated. The
      * exclusion matters: without it the current event pairs with itself at zero distance and zero
