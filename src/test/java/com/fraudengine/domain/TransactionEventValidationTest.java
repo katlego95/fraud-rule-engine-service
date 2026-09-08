@@ -67,6 +67,24 @@ class TransactionEventValidationTest {
         assertThat(violations(withAmount(new BigDecimal("-1.00")))).containsExactly("amount");
     }
 
+    /**
+     * The column is numeric(18,2), so a third place is rounded on write while the rules evaluate
+     * the unrounded value and the audit snapshot keeps it. Two records of one transaction that
+     * disagree, and nothing warns. Rejected at the boundary instead, as a foreign currency is.
+     */
+    @Test
+    void rejectsAnAmountWithMoreThanTwoDecimalPlaces() {
+        assertThat(violations(withAmount(new BigDecimal("120.999")))).containsExactly("amount");
+        assertThat(violations(withAmount(new BigDecimal("0.001")))).containsExactly("amount");
+    }
+
+    @Test
+    void acceptsAmountsAtOrBelowTwoDecimalPlaces() {
+        assertThat(violations(withAmount(new BigDecimal("120.99")))).isEmpty();
+        assertThat(violations(withAmount(new BigDecimal("120.9")))).isEmpty();
+        assertThat(violations(withAmount(new BigDecimal("120")))).isEmpty();
+    }
+
     @Test
     void rejectsMerchantCategoryCodeThatIsNotFourDigits() {
         assertThat(violations(withMcc("541"))).containsExactly("merchantCategoryCode");

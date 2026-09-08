@@ -3,6 +3,7 @@ package com.fraudengine.domain;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.DecimalMax;
+import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -23,14 +24,18 @@ import java.util.UUID;
  *
  * @param eventId client-supplied idempotency key; resubmitting one returns the original decision
  * @param occurredAt event time, which drives every velocity window — never the server clock
- * @param amount minor-unit-safe decimal; serialised across the API boundary as a string
+ * @param amount minor-unit-safe decimal, at most two places to match {@code numeric(18,2)};
+ *     serialised across the API boundary as a string
  */
 public record TransactionEvent(
         @NotNull UUID eventId,
         @NotNull Instant occurredAt,
         @NotBlank String accountId,
         @NotNull CardToken cardToken,
-        @NotNull @Positive BigDecimal amount,
+        @NotNull @Positive
+        @Digits(integer = 16, fraction = 2,
+                message = "must have at most two decimal places; the column stores two and would round")
+        BigDecimal amount,
         @NotBlank @Pattern(regexp = "^[A-Z]{3}$", message = "must be an ISO 4217 alphabetic code")
         String currency,
         @NotBlank String merchantId,
