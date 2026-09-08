@@ -98,6 +98,23 @@ class RuleApiIT extends PostgresIntegrationTest {
                 .andExpect(jsonPath("$.length()").value(2));
     }
 
+    /**
+     * A genuinely new typology cannot be created over HTTP. RuleType is an enum, so an unknown
+     * value fails deserialisation before any of this service's code runs — which is the boundary
+     * between configuration, which is free, and extension, which needs an evaluator and a deploy.
+     */
+    @Test
+    void aTypeNoEvaluatorImplementsIsRejected() throws Exception {
+        mvc.perform(post("/api/v1/rules").contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"code":"BEHAVIOURAL_BIOMETRICS","type":"TYPING_CADENCE",
+                                 "mode":"SHADOW","nature":"CONTRIBUTORY","weight":20,
+                                 "parameters":"{}","description":"A type no evaluator implements.",
+                                 "typology":"Testing"}
+                                """))
+                .andExpect(status().isBadRequest());
+    }
+
     /** ADR 0008, enforced: a rule nobody has observed does not get to decide. */
     @Test
     void aNewRuleSubmittedAsActiveIsRejected() throws Exception {
