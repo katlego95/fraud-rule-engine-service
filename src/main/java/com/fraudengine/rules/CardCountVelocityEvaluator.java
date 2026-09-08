@@ -31,6 +31,11 @@ class CardCountVelocityEvaluator implements RuleEvaluator {
     }
 
     @Override
+    public Class<?> parametersType() {
+        return Parameters.class;
+    }
+
+    @Override
     public RuleOutcome evaluate(Rule rule, TransactionEvent event) {
         Parameters params = parameters.read(rule, Parameters.class);
         Instant windowStart = event.occurredAt().minus(Duration.ofMinutes(params.windowMinutes()));
