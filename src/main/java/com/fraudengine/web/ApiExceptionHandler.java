@@ -2,7 +2,9 @@ package com.fraudengine.web;
 
 import com.fraudengine.decision.IdempotencyConflictException;
 import com.fraudengine.decision.InvalidCursorException;
+import com.fraudengine.rules.InvalidRuleDefinitionException;
 import com.fraudengine.rules.InvalidRuleParametersException;
+import com.fraudengine.rules.RuleNotFoundException;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import org.springframework.http.HttpStatus;
@@ -62,6 +64,26 @@ class ApiExceptionHandler {
         return problem;
     }
 
+    @ExceptionHandler(RuleNotFoundException.class)
+    ProblemDetail onRuleNotFound(RuleNotFoundException e) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, e.getMessage());
+        problem.setTitle("Rule not found");
+        return problem;
+    }
+
+    /** Rejected on the write, so the caller who made the mistake is the one who hears about it. */
+    @ExceptionHandler(InvalidRuleDefinitionException.class)
+    ProblemDetail onInvalidRuleDefinition(InvalidRuleDefinitionException e) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getMessage());
+        problem.setTitle("Invalid rule definition");
+        return problem;
+    }
+
+    /**
+     * A rule already in the database could not be read while deciding. By the time this is seen
+     * the bad rule is ours, not the caller's, so it is a 500 — and validating on write is what
+     * keeps it unreachable.
+     */
     @ExceptionHandler(InvalidRuleParametersException.class)
     ProblemDetail onInvalidRuleParameters(InvalidRuleParametersException e) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(

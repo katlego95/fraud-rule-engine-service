@@ -24,6 +24,11 @@ class MccSetEvaluator implements RuleEvaluator {
     }
 
     @Override
+    public Class<?> parametersType() {
+        return Parameters.class;
+    }
+
+    @Override
     public RuleOutcome evaluate(Rule rule, TransactionEvent event) {
         Set<String> codes = parameters.read(rule, Parameters.class).codes();
         String mcc = event.merchantCategoryCode();

@@ -7,7 +7,9 @@ import com.fraudengine.domain.RuleMode;
 import com.fraudengine.domain.RuleNature;
 import com.fraudengine.domain.RuleType;
 import com.fraudengine.domain.Verdict;
+import com.fraudengine.rules.RuleNotFoundException;
 import com.fraudengine.rules.RuleRepository;
+import com.fraudengine.rules.RuleValidator;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -15,6 +17,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -23,6 +26,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -30,11 +34,14 @@ import org.springframework.web.bind.annotation.RestController;
 class RuleController {
 
     private final RuleRepository rules;
+    private final RuleValidator validator;
     private final ShadowReportRepository shadowReports;
     private final Clock clock;
 
-    RuleController(RuleRepository rules, ShadowReportRepository shadowReports, Clock clock) {
+    RuleController(RuleRepository rules, RuleValidator validator,
+            ShadowReportRepository shadowReports, Clock clock) {
         this.rules = rules;
+        this.validator = validator;
         this.shadowReports = shadowReports;
         this.clock = clock;
     }
@@ -48,7 +55,7 @@ class RuleController {
     List<RuleResponse> history(@PathVariable String code) {
         List<Rule> versions = rules.findHistory(code);
         if (versions.isEmpty()) {
-            throw new DecisionNotFoundException("No rule with code " + code);
+            throw new RuleNotFoundException(code);
         }
         return versions.stream().map(RuleResponse::from).toList();
     }
@@ -66,20 +73,29 @@ class RuleController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to) {
         if (rules.findHistory(code).isEmpty()) {
-            throw new DecisionNotFoundException("No rule with code " + code);
+            throw new RuleNotFoundException(code);
         }
         return shadowReports.reportFor(code,
                 from == null ? Instant.EPOCH : from,
                 to == null ? clock.instant() : to);
     }
 
-    /** Creates a rule, or the next version of an existing code. Never mutates a prior version. */
+    /**
+     * Creates a rule, or the next version of an existing code. Never mutates a prior version.
+     *
+     * <p>Parameters are parsed before the insert. The same parse happens at decision time, so
+     * skipping it here only defers the failure to the next transaction, where it is a 500 for a
+     * caller who did nothing wrong.
+     */
     @PostMapping
+    @ResponseStatus(HttpStatus.CREATED)
     RuleResponse create(@Valid @RequestBody CreateRule request) {
-        return RuleResponse.from(rules.insertNextVersion(new Rule(
-                null, request.code(), 0, request.type(), request.mode(), request.nature(),
-                request.verdict(), request.weight(), request.parameters(), request.description(),
-                request.typology(), null, null)));
+        Rule definition = Rule.definition(request.code(), request.type(), request.mode(),
+                request.nature(), request.verdict(), request.weight(), request.parameters(),
+                request.description(), request.typology());
+
+        validator.validate(definition);
+        return RuleResponse.from(rules.insertNextVersion(definition));
     }
 
     /**

@@ -24,6 +24,11 @@ class AmountThresholdEvaluator implements RuleEvaluator {
     }
 
     @Override
+    public Class<?> parametersType() {
+        return Parameters.class;
+    }
+
+    @Override
     public RuleOutcome evaluate(Rule rule, TransactionEvent event) {
         BigDecimal threshold = parameters.read(rule, Parameters.class).threshold();
 

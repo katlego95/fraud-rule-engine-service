@@ -10,5 +10,8 @@ public interface RuleEvaluator {
 
     RuleType type();
 
+    /** The record this evaluator's JSONB parameters must deserialise into. */
+    Class<?> parametersType();
+
     RuleOutcome evaluate(Rule rule, TransactionEvent event);
 }
