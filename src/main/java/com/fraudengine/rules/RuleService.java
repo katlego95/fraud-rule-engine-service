@@ -2,6 +2,7 @@ package com.fraudengine.rules;
 
 import com.fraudengine.domain.Rule;
 import com.fraudengine.domain.RuleMode;
+import java.util.UUID;
 import java.util.Optional;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -53,5 +54,19 @@ public class RuleService {
         }
 
         return rules.insertNextVersion(definition);
+    }
+
+    /**
+     * Moves a rule between ACTIVE, SHADOW and DISABLED.
+     *
+     * <p>Mode is operational state rather than rule definition, so it mutates in place and the
+     * transition is recorded. Here rather than straight to the repository so that both write paths
+     * — a new version and a mode change — sit behind one door, and both are transactional: the
+     * snapshot refresh that follows a rule change is triggered on commit, and a write with no
+     * transaction around it has no commit to trigger on.
+     */
+    @Transactional
+    public Rule changeMode(UUID id, RuleMode target) {
+        return rules.changeMode(id, target);
     }
 }

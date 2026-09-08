@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.jdbc.core.RowMapper;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,11 +26,13 @@ public class RuleRepository {
             """;
 
     private final JdbcClient jdbc;
+    private final ApplicationEventPublisher events;
     private final Clock clock;
 
-    RuleRepository(JdbcClient jdbc, Clock clock) {
+    RuleRepository(JdbcClient jdbc, Clock clock, ApplicationEventPublisher events) {
         this.jdbc = jdbc;
         this.clock = clock;
+        this.events = events;
     }
 
     /** The evaluation set: current versions that are not disabled. Shadow rules are included. */
@@ -106,6 +109,9 @@ public class RuleRepository {
                 .param("createdAt", OffsetDateTime.ofInstant(now, clock.getZone()))
                 .update();
 
+        // Consumed after this transaction commits, so a rollback leaves the snapshot untouched.
+        events.publishEvent(new RuleChangedEvent(rule.code()));
+
         return findById(id).orElseThrow();
     }
 
@@ -142,6 +148,9 @@ public class RuleRepository {
                 .param("toMode", target.name())
                 .param("changedAt", OffsetDateTime.now(clock))
                 .update();
+
+        // A redundant change returns early above, so this fires only when the mode really moved.
+        events.publishEvent(new RuleChangedEvent(current.code()));
 
         return findById(id).orElseThrow();
     }

@@ -5,7 +5,7 @@ import com.fraudengine.domain.Rule;
 import com.fraudengine.domain.RuleOutcome;
 import com.fraudengine.domain.TransactionEvent;
 import com.fraudengine.rules.RuleEngine;
-import com.fraudengine.rules.RuleRepository;
+import com.fraudengine.rules.EvaluableRules;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -23,7 +23,7 @@ public class DecisionService {
 
     private final TransactionEventRepository events;
     private final DecisionRepository decisions;
-    private final RuleRepository rules;
+    private final EvaluableRules rules;
     private final RuleEngine ruleEngine;
     private final CompositionEngine compositionEngine;
     private final PayloadHash payloadHash;
@@ -34,7 +34,7 @@ public class DecisionService {
     private final String engineVersion;
 
     DecisionService(TransactionEventRepository events, DecisionRepository decisions,
-            RuleRepository rules, RuleEngine ruleEngine, CompositionEngine compositionEngine,
+            EvaluableRules rules, RuleEngine ruleEngine, CompositionEngine compositionEngine,
             PayloadHash payloadHash, EventPrivacy privacy,
             com.fraudengine.observability.DecisionMetrics metrics, JsonMapper json, Clock clock,
             @Value("${fraud.engine-version}") String engineVersion) {
@@ -73,7 +73,7 @@ public class DecisionService {
         }
 
         io.micrometer.core.instrument.Timer.Sample sample = metrics.start();
-        List<Rule> evaluable = rules.findEvaluable();
+        List<Rule> evaluable = rules.current();
         List<RuleOutcome> outcomes = ruleEngine.evaluate(evaluable, event);
         Composition composition = compositionEngine.compose(outcomes);
 
