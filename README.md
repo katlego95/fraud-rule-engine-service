@@ -105,7 +105,7 @@ Ten rules, each mapped to a named fraud typology.
 | `HIGH_AMOUNT` | active | contributory | +15 | General anomaly |
 | `HIGH_RISK_MCC` | active | contributory | +15 | Stolen card usage |
 | `BLOCKED_COUNTRY` | active | decisive | BLOCK | Sanctions, known-fraud geographies |
-| `CNP_HIGH_AMOUNT` | active | contributory | +25 | Card-not-present fraud |
+| `CNP_HIGH_AMOUNT` | active | contributory | +25 | Card-not-present fraud — e-commerce and transfer |
 | `CARD_TXN_VELOCITY` | active | decisive | BLOCK | Card testing |
 | `MERCHANT_SPREAD_VELOCITY` | active | contributory | +20 | Card testing across merchants |
 | `ACCOUNT_AMOUNT_VELOCITY` | active | decisive | REVIEW | Account takeover, cash-out |

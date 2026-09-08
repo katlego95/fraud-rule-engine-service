@@ -93,17 +93,48 @@ class StatelessEvaluatorTest {
     }
 
     @Test
-    void cardNotPresentAboveThresholdMatchesOnlyOnTheConfiguredChannel() {
+    void cardNotPresentAboveThresholdMatchesOnEveryConfiguredChannel() {
         Rule rule = contributoryRule(RuleType.CHANNEL_AMOUNT,
-                "{\"channel\":\"ECOMMERCE\",\"threshold\":\"5000.00\"}");
+                "{\"channels\":[\"ECOMMERCE\",\"TRANSFER\"],\"threshold\":\"5000.00\"}");
         ChannelAmountEvaluator evaluator = new ChannelAmountEvaluator(parameters);
 
         assertThat(evaluator.evaluate(rule, event(new BigDecimal("5000.01"), Channel.ECOMMERCE, "5411", "ZA")).status())
                 .isEqualTo(OutcomeStatus.MATCHED);
+        // The channel that used to slip through: card-not-present by definition, and the rule is
+        // named for that category.
+        assertThat(evaluator.evaluate(rule, event(new BigDecimal("5000.01"), Channel.TRANSFER, "5411", "ZA")).status())
+                .isEqualTo(OutcomeStatus.MATCHED);
+
         assertThat(evaluator.evaluate(rule, event(new BigDecimal("5000.01"), Channel.CARD_PRESENT, "5411", "ZA")).status())
+                .isEqualTo(OutcomeStatus.NOT_MATCHED);
+        assertThat(evaluator.evaluate(rule, event(new BigDecimal("5000.01"), Channel.ATM, "5411", "ZA")).status())
                 .isEqualTo(OutcomeStatus.NOT_MATCHED);
         assertThat(evaluator.evaluate(rule, event(new BigDecimal("5000.00"), Channel.ECOMMERCE, "5411", "ZA")).status())
                 .isEqualTo(OutcomeStatus.NOT_MATCHED);
+    }
+
+    /** A single-channel rule stays expressible — the set did not remove the narrow case. */
+    @Test
+    void aChannelAmountRuleCanStillTargetOneChannel() {
+        Rule rule = contributoryRule(RuleType.CHANNEL_AMOUNT,
+                "{\"channels\":[\"ATM\"],\"threshold\":\"3000.00\"}");
+        ChannelAmountEvaluator evaluator = new ChannelAmountEvaluator(parameters);
+
+        assertThat(evaluator.evaluate(rule, event(new BigDecimal("3000.01"), Channel.ATM, "5411", "ZA")).status())
+                .isEqualTo(OutcomeStatus.MATCHED);
+        assertThat(evaluator.evaluate(rule, event(new BigDecimal("3000.01"), Channel.ECOMMERCE, "5411", "ZA")).status())
+                .isEqualTo(OutcomeStatus.NOT_MATCHED);
+    }
+
+    /** The reason names the configured set, in a stable order, because an agent reads it. */
+    @Test
+    void theReasonNamesTheChannelsInAStableOrder() {
+        Rule rule = contributoryRule(RuleType.CHANNEL_AMOUNT,
+                "{\"channels\":[\"TRANSFER\",\"ECOMMERCE\"],\"threshold\":\"5000.00\"}");
+        ChannelAmountEvaluator evaluator = new ChannelAmountEvaluator(parameters);
+
+        assertThat(evaluator.evaluate(rule, event(new BigDecimal("10.00"), Channel.CARD_PRESENT, "5411", "ZA")).reason())
+                .isEqualTo("Channel CARD_PRESENT is not in [ECOMMERCE, TRANSFER]");
     }
 
     @Test
