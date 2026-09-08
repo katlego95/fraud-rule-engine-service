@@ -86,8 +86,10 @@ class RuleApiIT extends PostgresIntegrationTest {
     /** Editing a rule is a new version, never a mutation — the prior one stays readable. */
     @Test
     void postingAnExistingCodeAddsAVersionRatherThanReplacingIt() throws Exception {
+        // ACTIVE, because HIGH_AMOUNT is: a new version has to keep the mode in force, or editing
+        // a threshold would take the rule out of the verdict as a side effect. See RuleService.
         mvc.perform(post("/api/v1/rules").contentType(MediaType.APPLICATION_JSON)
-                        .content(rule("HIGH_AMOUNT", "{\\\"threshold\\\":\\\"7500.00\\\"}")))
+                        .content(rule("HIGH_AMOUNT", "{\\\"threshold\\\":\\\"7500.00\\\"}", "ACTIVE")))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.version").value(2));
 
@@ -96,11 +98,56 @@ class RuleApiIT extends PostgresIntegrationTest {
                 .andExpect(jsonPath("$.length()").value(2));
     }
 
+    /**
+     * A genuinely new typology cannot be created over HTTP. RuleType is an enum, so an unknown
+     * value fails deserialisation before any of this service's code runs — which is the boundary
+     * between configuration, which is free, and extension, which needs an evaluator and a deploy.
+     */
+    @Test
+    void aTypeNoEvaluatorImplementsIsRejected() throws Exception {
+        mvc.perform(post("/api/v1/rules").contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"code":"BEHAVIOURAL_BIOMETRICS","type":"TYPING_CADENCE",
+                                 "mode":"SHADOW","nature":"CONTRIBUTORY","weight":20,
+                                 "parameters":"{}","description":"A type no evaluator implements.",
+                                 "typology":"Testing"}
+                                """))
+                .andExpect(status().isBadRequest());
+    }
+
+    /** ADR 0008, enforced: a rule nobody has observed does not get to decide. */
+    @Test
+    void aNewRuleSubmittedAsActiveIsRejected() throws Exception {
+        mvc.perform(post("/api/v1/rules").contentType(MediaType.APPLICATION_JSON)
+                        .content(rule("STRAIGHT_TO_ACTIVE", "{\\\"threshold\\\":\\\"8000.00\\\"}", "ACTIVE")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.title").value("Invalid rule mode"))
+                .andExpect(jsonPath("$.detail").value(org.hamcrest.Matchers.containsString("SHADOW")));
+    }
+
+    /** Editing a live rule into shadow would disable it. Rejected, not silently applied. */
+    @Test
+    void aNewVersionThatWouldChangeTheModeIsRejected() throws Exception {
+        mvc.perform(post("/api/v1/rules").contentType(MediaType.APPLICATION_JSON)
+                        .content(rule("HIGH_AMOUNT", "{\\\"threshold\\\":\\\"7500.00\\\"}", "SHADOW")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail").value(org.hamcrest.Matchers.containsString("currently ACTIVE")));
+
+        // and the live rule is untouched
+        mvc.perform(get("/api/v1/rules/{code}/history", "HIGH_AMOUNT"))
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].mode").value("ACTIVE"));
+    }
+
     private static String rule(String code, String parameters) {
+        return rule(code, parameters, "SHADOW");
+    }
+
+    private static String rule(String code, String parameters, String mode) {
         return """
-                {"code":"%s","type":"AMOUNT_THRESHOLD","mode":"SHADOW","nature":"CONTRIBUTORY",
+                {"code":"%s","type":"AMOUNT_THRESHOLD","mode":"%s","nature":"CONTRIBUTORY",
                  "weight":10,"parameters":"%s","description":"A rule under test.",
                  "typology":"Testing"}
-                """.formatted(code, parameters);
+                """.formatted(code, mode, parameters);
     }
 }

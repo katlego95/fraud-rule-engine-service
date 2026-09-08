@@ -3,6 +3,7 @@ package com.fraudengine.web;
 import com.fraudengine.decision.IdempotencyConflictException;
 import com.fraudengine.decision.InvalidCursorException;
 import com.fraudengine.rules.InvalidRuleDefinitionException;
+import com.fraudengine.rules.InvalidRuleModeException;
 import com.fraudengine.rules.InvalidRuleParametersException;
 import com.fraudengine.rules.RuleNotFoundException;
 import java.util.LinkedHashMap;
@@ -68,6 +69,14 @@ class ApiExceptionHandler {
     ProblemDetail onRuleNotFound(RuleNotFoundException e) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, e.getMessage());
         problem.setTitle("Rule not found");
+        return problem;
+    }
+
+    /** A rule submitted in a mode the write path does not allow. See ADR 0008. */
+    @ExceptionHandler(InvalidRuleModeException.class)
+    ProblemDetail onInvalidRuleMode(InvalidRuleModeException e) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getMessage());
+        problem.setTitle("Invalid rule mode");
         return problem;
     }
 

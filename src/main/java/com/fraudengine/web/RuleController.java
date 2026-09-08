@@ -9,7 +9,7 @@ import com.fraudengine.domain.RuleType;
 import com.fraudengine.domain.Verdict;
 import com.fraudengine.rules.RuleNotFoundException;
 import com.fraudengine.rules.RuleRepository;
-import com.fraudengine.rules.RuleValidator;
+import com.fraudengine.rules.RuleService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -34,14 +34,14 @@ import org.springframework.web.bind.annotation.RestController;
 class RuleController {
 
     private final RuleRepository rules;
-    private final RuleValidator validator;
+    private final RuleService ruleService;
     private final ShadowReportRepository shadowReports;
     private final Clock clock;
 
-    RuleController(RuleRepository rules, RuleValidator validator,
+    RuleController(RuleRepository rules, RuleService ruleService,
             ShadowReportRepository shadowReports, Clock clock) {
         this.rules = rules;
-        this.validator = validator;
+        this.ruleService = ruleService;
         this.shadowReports = shadowReports;
         this.clock = clock;
     }
@@ -86,6 +86,9 @@ class RuleController {
      * <p>Parameters are parsed before the insert. The same parse happens at decision time, so
      * skipping it here only defers the failure to the next transaction, where it is a 500 for a
      * caller who did nothing wrong.
+     *
+     * <p>Mode is constrained too — a new rule must start in SHADOW, and a new version must keep
+     * the mode in force. See {@link RuleService}.
      */
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
@@ -94,8 +97,7 @@ class RuleController {
                 request.nature(), request.verdict(), request.weight(), request.parameters(),
                 request.description(), request.typology());
 
-        validator.validate(definition);
-        return RuleResponse.from(rules.insertNextVersion(definition));
+        return RuleResponse.from(ruleService.create(definition));
     }
 
     /**
