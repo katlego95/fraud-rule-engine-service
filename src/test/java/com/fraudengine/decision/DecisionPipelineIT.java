@@ -82,6 +82,30 @@ class DecisionPipelineIT extends PostgresIntegrationTest {
         assertThat(decision.verdict()).isEqualTo(Verdict.REVIEW);
     }
 
+    /**
+     * TRANSFER is card-not-present, and until V8 the rule named for that typology matched only
+     * ECOMMERCE — so a large transfer scored nothing from it.
+     */
+    @Test
+    void aLargeTransferTripsTheCardNotPresentRule() {
+        Decision decision = service.decide(
+                event(new BigDecimal("12000.00"), Channel.TRANSFER, "5411", "ZA")).decision();
+
+        RuleOutcome cnp = outcomeFor(decision, "CNP_HIGH_AMOUNT");
+        assertThat(cnp.status()).isEqualTo(OutcomeStatus.MATCHED);
+        assertThat(cnp.contribution()).isEqualTo(25);
+        assertThat(cnp.ruleVersion()).isEqualTo(2);
+    }
+
+    /** Card-present channels are still outside it — widening the set did not widen it to everything. */
+    @Test
+    void aLargeAtmWithdrawalDoesNotTripTheCardNotPresentRule() {
+        Decision decision = service.decide(
+                event(new BigDecimal("12000.00"), Channel.ATM, "5411", "ZA")).decision();
+
+        assertThat(outcomeFor(decision, "CNP_HIGH_AMOUNT").status()).isEqualTo(OutcomeStatus.NOT_MATCHED);
+    }
+
     @Test
     void decisionCarriesTheBandsInForceAndTheEngineVersion() {
         Decision decision = service.decide(event(new BigDecimal("50.00"), Channel.ATM, "5411", "ZA")).decision();

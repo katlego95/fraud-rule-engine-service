@@ -60,6 +60,17 @@ class RuleRepositoryIT extends PostgresIntegrationTest {
     }
 
     @Test
+    void cnpRuleWasWidenedByVersioningRatherThanRenaming() {
+        // V8 supersedes version 1 and inserts version 2 covering both card-not-present channels.
+        // The code is unchanged on purpose: it is denormalised onto every decision_rule_outcomes
+        // row, so renaming would orphan the history of every decision the rule has influenced.
+        assertThat(repository.findHistory("CNP_HIGH_AMOUNT")).hasSize(2);
+        assertThat(current("CNP_HIGH_AMOUNT").version()).isEqualTo(2);
+        assertThat(current("CNP_HIGH_AMOUNT").parameters()).contains("ECOMMERCE").contains("TRANSFER");
+        assertThat(repository.findHistory("CNP_HIGH_AMOUNT").getLast().supersededAt()).isNotNull();
+    }
+
+    @Test
     void seededWeightsCrossTheBandsAsIntended() {
         int highAmount = weightOf("HIGH_AMOUNT");
         int highRiskMcc = weightOf("HIGH_RISK_MCC");
