@@ -26,6 +26,17 @@ public record Rule(
         Instant createdAt,
         Instant supersededAt) {
 
+    /**
+     * A rule as submitted, before it is stored. The identifier, version and timestamps are
+     * assigned on insert, so they are absent here rather than invented by the caller.
+     */
+    public static Rule definition(String code, RuleType type, RuleMode mode, RuleNature nature,
+            Verdict verdict, Integer weight, String parameters, String description,
+            String typology) {
+        return new Rule(null, code, 0, type, mode, nature, verdict, weight, parameters,
+                description, typology, null, null);
+    }
+
     public boolean isDecisive() {
         return nature == RuleNature.DECISIVE;
     }
