@@ -107,7 +107,7 @@ class RuleController {
      */
     @PatchMapping("/{id}/mode")
     RuleResponse changeMode(@PathVariable UUID id, @Valid @RequestBody ChangeMode request) {
-        return RuleResponse.from(rules.changeMode(id, request.mode()));
+        return RuleResponse.from(ruleService.changeMode(id, request.mode()));
     }
 
     record CreateRule(

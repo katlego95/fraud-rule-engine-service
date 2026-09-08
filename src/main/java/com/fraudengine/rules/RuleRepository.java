@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.jdbc.core.RowMapper;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,11 +26,13 @@ public class RuleRepository {
             """;
 
     private final JdbcClient jdbc;
+    private final ApplicationEventPublisher events;
     private final Clock clock;
 
-    RuleRepository(JdbcClient jdbc, Clock clock) {
+    RuleRepository(JdbcClient jdbc, Clock clock, ApplicationEventPublisher events) {
         this.jdbc = jdbc;
         this.clock = clock;
+        this.events = events;
     }
 
     /** The evaluation set: current versions that are not disabled. Shadow rules are included. */
@@ -106,6 +109,8 @@ public class RuleRepository {
                 .param("createdAt", OffsetDateTime.ofInstant(now, clock.getZone()))
                 .update();
 
+        announce(rule.code());
+
         return findById(id).orElseThrow();
     }
 
@@ -143,7 +148,22 @@ public class RuleRepository {
                 .param("changedAt", OffsetDateTime.now(clock))
                 .update();
 
+        // A redundant change returns early above, so this fires only when the mode really moved.
+        announce(current.code());
+
         return findById(id).orElseThrow();
+    }
+
+    /**
+     * Tells this instance and every other one that the rule set has moved.
+     *
+     * <p>Both halves land on commit and neither on a rollback: the Spring event is consumed
+     * AFTER_COMMIT, and PostgreSQL holds a NOTIFY until the transaction that issued it commits.
+     * The event reaches this instance, the notification reaches the others.
+     */
+    private void announce(String code) {
+        events.publishEvent(new RuleChangedEvent(code));
+        jdbc.sql("notify " + RuleChangeListener.CHANNEL).update();
     }
 
     private RowMapper<Rule> mapper() {

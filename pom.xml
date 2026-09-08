@@ -52,10 +52,16 @@
             <artifactId>micrometer-registry-prometheus</artifactId>
             <scope>runtime</scope>
         </dependency>
+        <!--
+            Compile scope, not runtime: RuleChangeListener uses LISTEN/NOTIFY, which has no
+            JDBC-standard equivalent, so the driver's PGConnection is a compile-time dependency.
+            The coupling is real either way — ADR 0003 already treats PostgreSQL as the database
+            this service runs on rather than an interchangeable one — and declaring it is better
+            than reaching for the same API reflectively.
+        -->
         <dependency>
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
-            <scope>runtime</scope>
         </dependency>
 
         <!-- Not managed by the Spring Boot BOM; 3.1.0 is the first line built against Boot 4.1. -->

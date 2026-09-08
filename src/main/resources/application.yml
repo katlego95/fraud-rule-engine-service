@@ -21,6 +21,17 @@ spring:
     locations: classpath:db/migration
 
 fraud:
+  rules:
+    snapshot:
+      # The backstop, not the mechanism. A rule change reaches this instance on commit and every
+      # other one by notification; this bounds how long a lost notification could leave an
+      # instance applying a rule that was withdrawn.
+      #
+      # Ten seconds because the cost is nil and the exposure is not. The refresh is one indexed
+      # query returning ten rows — a tenth of a query per second per instance, against the
+      # ~1,500 per second this cache removed. A minute of an instance still enforcing a rule
+      # somebody disabled during an attack is the expensive side of that trade, not the query.
+      refresh-interval-ms: 10000
   admission:
     # Measured, not chosen. p99 held at 128ms with 100 requests in flight and reached 179ms at
     # 150, against a 150ms budget. Beyond this the service does not fail — it exceeds its own
