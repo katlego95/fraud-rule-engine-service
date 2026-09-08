@@ -109,8 +109,7 @@ public class RuleRepository {
                 .param("createdAt", OffsetDateTime.ofInstant(now, clock.getZone()))
                 .update();
 
-        // Consumed after this transaction commits, so a rollback leaves the snapshot untouched.
-        events.publishEvent(new RuleChangedEvent(rule.code()));
+        announce(rule.code());
 
         return findById(id).orElseThrow();
     }
@@ -150,9 +149,21 @@ public class RuleRepository {
                 .update();
 
         // A redundant change returns early above, so this fires only when the mode really moved.
-        events.publishEvent(new RuleChangedEvent(current.code()));
+        announce(current.code());
 
         return findById(id).orElseThrow();
+    }
+
+    /**
+     * Tells this instance and every other one that the rule set has moved.
+     *
+     * <p>Both halves land on commit and neither on a rollback: the Spring event is consumed
+     * AFTER_COMMIT, and PostgreSQL holds a NOTIFY until the transaction that issued it commits.
+     * The event reaches this instance, the notification reaches the others.
+     */
+    private void announce(String code) {
+        events.publishEvent(new RuleChangedEvent(code));
+        jdbc.sql("notify " + RuleChangeListener.CHANNEL).update();
     }
 
     private RowMapper<Rule> mapper() {

@@ -64,6 +64,36 @@ class RuleSnapshotIT extends PostgresIntegrationTest {
         assertThat(codesInSnapshot()).doesNotContain(CODE);
     }
 
+    /**
+     * The cross-instance path. Another instance's write arrives as a PostgreSQL notification on a
+     * connection this process did not open, so the announcement is issued from a separate
+     * connection here rather than through the repository — otherwise the in-process event would
+     * do the work and the listener could be broken without anyone noticing.
+     */
+    @Test
+    void aNotificationFromAnotherConnectionRefreshesTheSnapshot() throws Exception {
+        jdbc.sql("""
+                insert into rules (id, code, version, type, mode, nature, verdict, weight,
+                                   parameters, description, typology, created_at)
+                values (:id, :code, 1, 'AMOUNT_THRESHOLD', 'SHADOW', 'CONTRIBUTORY', null, 5,
+                        cast(:parameters as jsonb), 'Inserted behind the snapshot.', 'Testing', now())
+                """)
+                .param("id", java.util.UUID.randomUUID())
+                .param("code", CODE)
+                .param("parameters", "{\"threshold\":\"999999.00\"}")
+                .update();
+
+        // Written straight to the table, so nothing in this process knows yet.
+        assertThat(codesInSnapshot()).doesNotContain(CODE);
+
+        jdbc.sql("notify " + RuleChangeListener.CHANNEL).update();
+
+        // The listener runs on its own thread and its own connection, so this is genuinely async.
+        org.awaitility.Awaitility.await()
+                .atMost(java.time.Duration.ofSeconds(5))
+                .until(() -> codesInSnapshot().contains(CODE));
+    }
+
     /** The interface the decision path depends on is the snapshot, not a query per decision. */
     @Test
     void theDecisionPathReadsTheSnapshot() {

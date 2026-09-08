@@ -166,6 +166,55 @@ number would have been a guess wearing a decimal point.
 
 ---
 
+## Measured change: caching the rule set
+
+The decision path read the rule set from PostgreSQL on every transaction — one of
+the five queries a decision makes. It now reads an in-memory snapshot refreshed
+when a rule changes. Same script, same level, three paired rounds, database reset
+before each:
+
+| Round | before rps | after rps | before p99 | after p99 |
+|---|---|---|---|---|
+| 1 | 1,338 | 1,355 | 171ms | 145ms |
+| 2 | 1,380 | 1,456 | 139ms | 127ms |
+| 3 | 1,398 | 1,462 | 136ms | 128ms |
+| **mean** | **1,372** | **1,424** | **149ms** | **133ms** |
+
+**About +4% throughput and -10% p99.** Modest, and stated as modest: a single pair
+would prove nothing, because 100 VUs varies by more than that on this machine. It
+is the direction being consistent across three paired rounds — after wins both
+metrics in all three — that makes it a result rather than noise.
+
+**It is also the size the arithmetic predicts.** One query of five is removed, but
+the query was a few milliseconds against a mean latency of about 70ms, and on one
+laptop the bottleneck is CPU shared between the application, the database and the
+load generator. Removing database work does not help much when the database was
+not the constraint.
+
+**Where the change actually pays.** The removed query is against the *shared*
+database, so its cost scales with instance count while the database does not. One
+instance at 1,400 rps saves ~1,400 queries per second; ten instances save 14,000,
+from a component that is not ten times bigger. That is the bottleneck named in the
+scaling section below, and this removes a fifth of the traffic to it.
+
+### What to watch
+
+```bash
+curl -s localhost:8080/actuator/metrics/fraud.rules.snapshot.age   # seconds since last refresh
+curl -s localhost:8080/actuator/metrics/fraud.rules.snapshot.size  # rules currently held
+curl -s localhost:8080/actuator/prometheus | grep fraud_rules
+```
+
+`age` is the one that matters. Caching trades consistency for not asking, so the
+staleness has to be visible rather than assumed: an instance whose age keeps
+climbing past the refresh interval has lost its notification connection and is
+applying rules that may have been withdrawn.
+
+Verified live — disabling a rule took `size` from 10 to 9 with no restart and no
+scheduled refresh in between.
+
+---
+
 ## Scaling from here
 
 The measured number is 1,500 rps per instance within budget.
