@@ -98,18 +98,25 @@ The flagged-fraud query the brief asks for: `GET /api/v1/decisions?verdict=BLOCK
 
 ## The rule set
 
-Eight rules, four evaluator families, each mapped to a named fraud typology.
+Ten rules, each mapped to a named fraud typology.
 
-| Rule | Nature | Effect | Typology |
-|---|---|---|---|
-| `HIGH_AMOUNT` | contributory | +15 | General anomaly |
-| `HIGH_RISK_MCC` | contributory | +15 | Stolen card usage |
-| `BLOCKED_COUNTRY` | decisive | BLOCK | Sanctions, known-fraud geographies |
-| `CNP_HIGH_AMOUNT` | contributory | +25 | Card-not-present fraud |
-| `CARD_TXN_VELOCITY` | decisive | BLOCK | Card testing |
-| `MERCHANT_SPREAD_VELOCITY` | contributory | +20 | Card testing across merchants |
-| `ACCOUNT_AMOUNT_VELOCITY` | decisive | REVIEW | Account takeover, cash-out |
-| `GEO_IMPOSSIBLE` | decisive | BLOCK | Cloned card, second location |
+| Rule | Mode | Nature | Effect | Typology |
+|---|---|---|---|---|
+| `HIGH_AMOUNT` | active | contributory | +15 | General anomaly |
+| `HIGH_RISK_MCC` | active | contributory | +15 | Stolen card usage |
+| `BLOCKED_COUNTRY` | active | decisive | BLOCK | Sanctions, known-fraud geographies |
+| `CNP_HIGH_AMOUNT` | active | contributory | +25 | Card-not-present fraud |
+| `CARD_TXN_VELOCITY` | active | decisive | BLOCK | Card testing |
+| `MERCHANT_SPREAD_VELOCITY` | active | contributory | +20 | Card testing across merchants |
+| `ACCOUNT_AMOUNT_VELOCITY` | active | decisive | REVIEW | Account takeover, cash-out |
+| `GEO_IMPOSSIBLE` | active | decisive | BLOCK | Cloned card, second location |
+| `IP_CARD_SPREAD` | **shadow** | contributory | +20 | Card testing from one source |
+| `DEVICE_ACCOUNT_SPREAD` | **shadow** | contributory | +25 | Mule networks, account takeover |
+
+The last two ship in shadow: they are evaluated and recorded on every decision but
+change no verdict, because nobody has validated their thresholds against real
+traffic. `GET /rules/{code}/shadow-report` answers what they would have done. See
+[ADR 0008](docs/adr/0008-new-rules-ship-in-shadow.md).
 
 **Hybrid decisioning.** Decisive rules emit a verdict directly; contributory rules add weight to a score. The final verdict is the more severe of the two. Bands: `< 40` approve, `40–69` review, `≥ 70` block. Weights are set so combinations cross the bands meaningfully, and a test asserts that arithmetic so a later change cannot silently flatten them.
 
@@ -193,6 +200,8 @@ The corpus is synthetic and deliberately constructed. These numbers demonstrate 
 ---
 
 ## Performance
+
+**Under load: 1,500 requests per second with zero errors**, on a laptop also running the database and the load generator. The stated 150ms p99 budget holds to 100 concurrent callers (128ms) and is gone by 150 (179ms). Past that the service keeps accepting work and simply gets slower, which is why admission control now caps in-flight decisions at 100 and answers 429 beyond it. Method, per-level numbers and a discarded outlier in [`docs/load-test.md`](docs/load-test.md).
 
 The velocity hot path is an index-only scan at **4 buffers, 0.13ms** against 200,000 events. The same query with its index disabled is a sequential scan at **3,435 buffers, 16.9ms** — not survivable at one per velocity rule per transaction under a 150ms budget. `EXPLAIN` output in [`docs/query-plans.md`](docs/query-plans.md).
 
