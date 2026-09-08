@@ -1,5 +1,10 @@
 # Build log
 
+> **Read as history.** This log records the build as it happened on 2026-08-03 and
+> is not updated afterwards. Statements like "all eight rules" were true then;
+> ADR 0008 added two more, and ADRs 0005, 0006 and 0007 carry dated update notes
+> where later work changed what they described. The README is the current state.
+
 Written at each phase boundary: what was built, why it is shaped that way, and the judgement
 calls made along the way. This is interview preparation, not a changelog — it records reasoning
 that the code deliberately does not carry.

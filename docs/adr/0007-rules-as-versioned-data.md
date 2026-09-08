@@ -53,3 +53,16 @@ The evaluator registry fails closed: an unregistered rule type refuses at startu
 - Grab Engineering, *Griffin, an anti-fraud risk rule engine making billions of predictions daily* — https://engineering.grab.com/griffin
 - Red Hat Developer, *Detecting credit card fraud with Red Hat Decision Manager 7* — https://developers.redhat.com/blog/2018/07/26/detecting-credit-card-fraud-with-red-hat-decision-manager-7
 - Databricks, *Payment fraud detection* — https://www.databricks.com/blog/payment-fraud-detection
+
+
+---
+
+## Update — 2026-09-08
+
+**Write-time validation is now wired.** The Consequences section above called it "a real gap... simply not yet wired to the write path". `RuleValidator` now runs the same parse before an insert, so a malformed rule is a **400 naming the offending field** rather than a 500 on the next transaction. Each evaluator declares the record its parameters must deserialise into, so there is no per-type table to maintain: a new rule type cannot compile without answering `parametersType()`.
+
+Two failures that were one are now distinct — an invalid definition is 400 and caught at the door; a stored rule that cannot be read stays 500, because by then the bad rule is ours.
+
+**What the gap has narrowed to, not closed.** `RuleValidator` has one call site, `RuleController.create`. Rules reaching the table by migration, by direct SQL, by a database restore, or written before the validator existed are still unchecked, and the reproduction on `main` is unchanged for them: the write succeeds and every subsequent transaction returns 500 until someone disables the rule. Validating the whole rule set at startup — the same shape as the existing evaluator-registry check — is what would close it for every path.
+
+**The rule count has moved.** Two type-level arguments here are stated against "eight rules": the Rete optimisation being irrelevant, and typed rule types being the right trade at eight and the wrong one at eighty. There are now **ten**, added by ADR 0008. The arguments hold at ten; they were always arguments about order of magnitude, and the number is worth updating rather than quietly leaving wrong.

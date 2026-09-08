@@ -78,6 +78,28 @@ worth it for one that is read on every transaction an account makes.
 
 ## Reproducing this
 
-`docs/query-plans.sql` is not committed — the seed above is four lines of `generate_series` and
-the plans are captured with the commands shown. What matters for review is that the indexes were
-justified against measured plans, and that the counterfactual was run rather than assumed.
+`perf/query-plans.sql` seeds the corpus and captures every plan above, including the
+counterfactual runs with the index disabled.
+
+```bash
+docker compose down -v && docker compose up -d postgres
+SPRING_PROFILES_ACTIVE=demo java -jar target/fraud-rule-engine-*.jar   # Flyway builds the schema
+# stop it, then:
+docker compose exec -T postgres psql -U fraud -d fraud -f - < perf/query-plans.sql
+```
+
+Two things the script has to do that are easy to get wrong, and both change the
+plans if missed:
+
+- **`vacuum analyze`, not `analyze`.** An index-only scan needs the visibility map
+  marked, and freshly inserted rows are not all-visible until a vacuum runs. Without
+  it every plan falls back to a bitmap heap scan and the indexes look worse than
+  they are.
+- **`psql -c "drop; create; vacuum"` runs as one transaction**, and `VACUUM` cannot,
+  so the whole statement fails silently if stderr is discarded — leaving the old
+  index in place and the comparison meaningless. Use `-f`, or separate `-c` calls.
+
+The original capture's seed was not kept; this reproduces it and returns the same
+numbers — card velocity index-only at 4 buffers, the account aggregate 103 buffers
+before V6 and 5 after. Row counts differ slightly from the machine used above, as
+they should.

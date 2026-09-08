@@ -42,3 +42,12 @@ response, which is the real shortcoming. Fixing it properly means designing a re
 that carries per-item status, deciding the HTTP status code for a mixed result, and documenting
 how a caller distinguishes "not attempted" from "attempted and failed" — a contract decision worth
 more care than the remaining schedule allowed. Deferred consciously rather than overlooked.
+
+
+---
+
+## Update — 2026-09-08
+
+**The size cap is now enforced.** `@Size(max = 500)` on the batch list, measured rather than chosen: a request of 10,000 events took 34.8 seconds, held one thread throughout and returned a 29MB body, accepted without complaint. At roughly 287 events per second the cap bounds one request to under two seconds. See `docs/load-test.md`.
+
+**The partial-success response is still deferred.** A mid-batch failure still stops at the failing item, leaves the decisions already made standing, and returns only the error — so a caller cannot distinguish 299 successes from none. Recoverable by resubmitting, since idempotency replays the successes, but not discoverable from the response.

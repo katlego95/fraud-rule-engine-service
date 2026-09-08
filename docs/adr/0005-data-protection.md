@@ -13,7 +13,7 @@ What does arrive still matters. `deviceId` and `ipAddress` are personal informat
 
 **Card tokens are masked in serialisation, not by convention.** The token is a value type whose JSON serialisation and `toString` both render `tok_****4821` — last four characters only. The unmasked form is unreachable through the normal serialisation path, so the careless log line is removed as an opportunity rather than warned against.
 
-**`deviceId` and `ipAddress` are hashed at rest with a salted SHA-256.** No query filters on them and no rule reads them, so a one-way hash costs nothing operationally while reducing what a database compromise yields. The hash is deterministic, so correlation survives — the same device still hashes to the same value — without being readable.
+**`deviceId` and `ipAddress` are hashed at rest with a salted SHA-256.** A one-way hash reduces what a database compromise yields, and because it is deterministic the same device always hashes to the same value, so equality survives — which is what grouping and counting need — without the value being readable.
 
 **`cardToken` and `accountId` stay in plaintext.** A deliberate, stated exception: velocity rules query by card token over event-time windows, and the retrieval API filters on both. Hashing them would break the queries the service exists to run. That is a real residual risk accepted for a stated reason, not an oversight.
 
@@ -34,3 +34,17 @@ The salt is not decoration. Hashing is deterministic and the input spaces are sm
 The audit trail pays a real cost: a masked token in the audit response means an investigator cannot read the full token from the API and must join through the account or the event identifier instead.
 
 Under POPIA, holding device and IP values hashed, unlogged, and unread by any rule is minimisation made concrete: they are retained only for correlation, which is the stated purpose.
+
+
+---
+
+## Update — 2026-09-08
+
+The original wording justified hashing partly on the grounds that "no query filters on them and no rule reads them". That is no longer true: `IP_CARD_SPREAD` and `DEVICE_ACCOUNT_SPREAD` (ADR 0008) both count distinct identifiers over these columns.
+
+The decision stands, and the better justification is the one that survives: a deterministic hash preserves equality, so grouping and counting work unchanged. What it costs is **structure** — a hash cannot be matched by IP subnet, prefix or ASN, only by exact equality. Any future rule needing that shape would have to revisit this.
+
+Two consequences worth recording:
+
+- Evaluators receive the **raw** event and the columns hold fingerprints, so a rule must hash before it queries. Getting that wrong returns zero and reads as a clean transaction — a rule that never fires and never errors. `EventPrivacy.fingerprint` is public for exactly this reason, and `SpreadEvaluatorIT.sixCardsFromOneIpMatches` is the regression test.
+- The card token remains plaintext, and the reason stated here — that hashing would break the velocity queries — is the weakest form of the argument, since the spread rules prove equality lookups work fine against hashed columns. The stronger reasons are that the masked form needs the last four digits, and that a card token is already tokenised: a stolen table yields tokens, never PANs.

@@ -8,10 +8,11 @@ import tools.jackson.databind.json.JsonMapper;
 /**
  * Reads a rule's JSONB parameters into the record its evaluator expects.
  *
- * <p>This same operation is what write-time validation would need — if the parameters do not parse
- * as that type's record, the configuration is invalid — but it is currently only called at
- * evaluation time, so a malformed rule is accepted on write and fails on the decision path
- * instead. See ADR 0007.
+ * <p>The same parse is the write-time validation: if the parameters do not deserialise into that
+ * type's record, the rule is invalid. {@link RuleValidator} runs it before an insert so a
+ * malformed rule is rejected with a 400 rather than failing on the decision path. Rules written by
+ * a migration or by direct SQL still bypass that check, which is why this remains the last line of
+ * defence. See ADR 0007.
  */
 @Component
 public class RuleParameters {
