@@ -11,10 +11,11 @@ import org.springframework.stereotype.Component;
 /**
  * Reduces what a database compromise yields.
  *
- * <p>Device and IP identifiers are hashed before they are stored: nothing queries them and no rule
- * reads them, so a deterministic one-way hash costs nothing operationally while making the stored
- * values unreadable. The same device still hashes to the same value, so they remain usable for
- * correlation.
+ * <p>Device and IP identifiers are hashed before they are stored, so the stored values are
+ * unreadable to anyone who obtains the table. The hash is deterministic: the same device always
+ * hashes to the same value, so equality still holds and rules can group and count by identifier
+ * without the plaintext ever being persisted. What is lost is structure — a hash cannot be matched
+ * by IP subnet or prefix, only by exact equality.
  *
  * <p>Card token and account identifier are deliberately left in plaintext — velocity windows query
  * by card token and the retrieval API filters on both, so hashing them would break the queries
@@ -36,10 +37,17 @@ public class EventPrivacy {
                 event.amount(), event.currency(), event.merchantId(), event.merchantName(),
                 event.merchantCategoryCode(), event.merchantCountry(), event.channel(),
                 event.latitude(), event.longitude(),
-                hash(event.deviceId()), hash(event.ipAddress()), event.category());
+                fingerprint(event.deviceId()), fingerprint(event.ipAddress()), event.category());
     }
 
-    private String hash(String value) {
+    /**
+     * The one place an identifier is turned into its stored form. Public because evaluators that
+     * query by device or IP have the plaintext in hand and the table holds only hashes: they must
+     * fingerprint the value before looking it up, using this salt and this algorithm. A second
+     * implementation elsewhere would produce a different digest, match nothing, and report zero —
+     * a rule that never fires and never errors.
+     */
+    public String fingerprint(String value) {
         if (value == null) {
             return null;
         }

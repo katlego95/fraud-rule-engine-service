@@ -64,4 +64,12 @@ public record TransactionEvent(
     public boolean hasCoordinates() {
         return latitude != null && longitude != null;
     }
+
+    public boolean hasIpAddress() {
+        return ipAddress != null && !ipAddress.isBlank();
+    }
+
+    public boolean hasDeviceId() {
+        return deviceId != null && !deviceId.isBlank();
+    }
 }

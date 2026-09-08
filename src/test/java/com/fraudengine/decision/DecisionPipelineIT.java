@@ -42,7 +42,10 @@ class DecisionPipelineIT extends PostgresIntegrationTest {
         assertThat(result.replayed()).isFalse();
         assertThat(result.decision().verdict()).isEqualTo(Verdict.APPROVE);
         assertThat(result.decision().totalScore()).isZero();
-        assertThat(result.decision().outcomes()).hasSize(8);
+
+        // Every rule that could run is recorded, so the expected count comes from the rule set
+        // rather than a literal that has to be edited each time a rule is added.
+        assertThat(result.decision().outcomes()).hasSameSizeAs(rules.findEvaluable());
         assertThat(result.decision().outcomes()).noneMatch(outcome -> outcome.status() == OutcomeStatus.MATCHED);
     }
 
@@ -161,11 +164,12 @@ class DecisionPipelineIT extends PostgresIntegrationTest {
 
         Decision reread = decisions.findById(decision.decisionId()).orElseThrow();
 
-        assertThat(reread.outcomes()).hasSize(8);
+        // The audit view must hold one outcome per evaluable rule — including the rules that did
+        // not match and the rules that could not run. Comparing against the rule set states that
+        // directly; a hardcoded list of codes only restates today's seed data.
         assertThat(reread.outcomes()).extracting(RuleOutcome::ruleCode)
-                .containsExactlyInAnyOrder("HIGH_AMOUNT", "HIGH_RISK_MCC", "BLOCKED_COUNTRY",
-                        "CNP_HIGH_AMOUNT", "CARD_TXN_VELOCITY", "MERCHANT_SPREAD_VELOCITY",
-                        "ACCOUNT_AMOUNT_VELOCITY", "GEO_IMPOSSIBLE");
+                .containsExactlyInAnyOrderElementsOf(
+                        rules.findEvaluable().stream().map(Rule::code).toList());
         assertThat(reread.outcomes()).allMatch(outcome -> !outcome.reason().isBlank());
     }
 
