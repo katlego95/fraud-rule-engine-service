@@ -71,6 +71,37 @@ public class VelocityRepository {
     }
 
     /**
+     * Distinct cards seen from one IP in the window, including the card being evaluated. The
+     * column stores a fingerprint, hence the parameter name; the column itself keeps the name of
+     * the thing it holds.
+     */
+    public long countDistinctCardsForIp(String ipFingerprint, Instant from, Instant to) {
+        return jdbc.sql("""
+                select count(distinct card_token) from transaction_events
+                where ip_address = :ipFingerprint and occurred_at between :from and :to
+                """)
+                .param("ipFingerprint", ipFingerprint)
+                .param("from", at(from))
+                .param("to", at(to))
+                .query(Long.class)
+                .single();
+    }
+
+    /** Distinct accounts seen from one device in the window, including the account being evaluated. */
+    public long countDistinctAccountsForDevice(String deviceFingerprint, Instant from, Instant to) {
+        return jdbc.sql("""
+                select count(distinct account_id) from transaction_events
+                where device_id = :deviceFingerprint and occurred_at between :from and :to
+                """)
+                .param("deviceFingerprint", deviceFingerprint)
+                .param("from", at(from))
+                .param("to", at(to))
+                .query(Long.class)
+                .single();
+    }
+
+
+    /**
      * Positions on this card within the window, excluding the event being evaluated. The
      * exclusion matters: without it the current event pairs with itself at zero distance and zero
      * elapsed time, which is the division by zero the geo rule would otherwise have to special-case.

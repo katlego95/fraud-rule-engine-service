@@ -11,11 +11,22 @@ spring:
       # the container without a database.
       initialization-fail-timeout: 10000
       connection-timeout: 5000
+      # Stated rather than inherited. Ten is the default and it proved sufficient — four rules
+      # query the database per decision, about 4ms of work, so ten connections carry far more
+      # than the ~1,500 rps this service reaches. Pinning it means a future default cannot move
+      # the ceiling without anyone noticing. See docs/load-test.md.
+      maximum-pool-size: 10
   flyway:
     enabled: true
     locations: classpath:db/migration
 
 fraud:
+  admission:
+    # Measured, not chosen. p99 held at 128ms with 100 requests in flight and reached 179ms at
+    # 150, against a 150ms budget. Beyond this the service does not fail — it exceeds its own
+    # latency promise for every caller rather than refusing any. See docs/load-test.md.
+    max-in-flight: 100
+    retry-after-seconds: 1
   # Pinned onto every decision so a verdict can be attributed to the code that produced it.
   # In production this would be the git SHA supplied at build time.
   engine-version: ${ENGINE_VERSION:0.1.0}
@@ -32,6 +43,12 @@ fraud:
 
 server:
   port: ${SERVER_PORT:8080}
+  tomcat:
+    threads:
+      # 200 is also the Spring Boot default. Written down because admission control is the limit
+      # that actually matters, and the two have to be read together: threads accept connections,
+      # permits decide how many are evaluated at once.
+      max: 200
 
 logging:
   structured:
