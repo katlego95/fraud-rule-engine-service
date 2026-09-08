@@ -5,13 +5,51 @@ test. This is one.
 
 ---
 
+## The words, first
+
+Everything below uses five terms. They are all simple.
+
+| Term | Plain English |
+|---|---|
+| **Latency** | how long **one** request takes, start to finish. Measured in milliseconds (ms). |
+| **Throughput** | how **many** requests finish per second. Written **rps** — requests per second. |
+| **Concurrency** | how many requests are **in flight at the same time**. k6 calls one of these a **VU** — a virtual user, a fake client sending requests back to back. 100 VUs is 100 simultaneous callers. |
+| **p95 / p99** | percentiles. **p99 = 128ms** means 99 of every 100 requests finished in 128ms or less, and the slowest 1 took longer. |
+| **Budget** | the promise. This service states a **150ms p99** — 99% of decisions inside 150ms. |
+
+**Why percentiles and not an average.** An average hides the bad cases. Ninety-nine
+requests at 10ms and one at 5 seconds averages to **60ms** — which looks healthy,
+and isn't: one customer waited five seconds at a card machine. p99 would report
+that request instead of burying it. Percentiles describe the unlucky tail; averages
+describe the comfortable middle.
+
+**Latency and throughput are not the same thing, and they trade off.** Adding
+concurrent callers usually raises throughput — more work finishing per second —
+while raising latency, because each request now queues behind others. That
+trade-off is exactly what the table below measures.
+
+**Reading one k6 result.** A run prints something like:
+
+```
+http_reqs......: 133108  1477.60/s     ← 133,108 requests, 1,478 per second (throughput)
+http_req_duration: avg=67ms p(95)=85ms  ← latency: typical 67ms, 95th percentile 85ms
+http_req_failed: 0.00%  0 out of 133108 ← errors: none
+THRESHOLDS: p(99)<150  p(99)=130ms  ✓   ← the budget, and whether it held
+```
+
+Four numbers to look at, in order: **failures** (is it broken?), **p99** (is it
+within budget?), **rps** (how much is it doing?), then the rest.
+
+---
+
 ## Findings
 
 **1. It never fails. It only gets slower.**
 
 Zero server errors at every level tried, up to 200 concurrent users and 1,600
-requests per second. No 5xx, no timeouts, no exceptions in the application log.
-Under load the service degrades by taking longer, not by refusing work.
+requests per second. No **5xx** — HTTP status codes in the 500s, meaning the
+server failed — no timeouts, no exceptions in the application log. Under load the
+service degrades by taking longer, not by refusing work.
 
 **2. It breaks its own latency promise between 100 and 150 concurrent.**
 
@@ -28,11 +66,18 @@ stated budget instead of quietly missing it for everyone.
 
 **4. The connection pool was never the bottleneck, which is not what I predicted.**
 
-I expected pool exhaustion — 200 Tomcat threads against 10 Hikari connections,
-queueing past the 5s timeout and surfacing as 500s. It never happened.
+**Tomcat** is the web server inside Spring Boot; it has a pool of threads, 200 by
+default, so it can hold 200 requests at once. **HikariCP** is the database
+connection pool — 10 by default, so only 10 requests can talk to Postgres
+simultaneously; the rest wait.
 
-Four rules query the database per decision, about 4ms of work, so ten
-connections carry roughly 2,500 rps. The load never reached it.
+I expected the pool to be the wall: 200 threads competing for 10 connections,
+requests queueing past Hikari's 5-second timeout and surfacing as 500s. It never
+happened.
+
+Four rules query the database per decision, about 4ms of database work in total,
+so ten connections carry roughly 2,500 requests per second. The load never
+reached it.
 
 **5. The batch endpoint is the one real hazard.**
 
@@ -49,6 +94,10 @@ sequential on one thread.
 
 ### Held concurrency — `knee.js`, 90s per level, database reset between levels
 
+Each row is one 90-second run holding a fixed number of simultaneous callers.
+Columns: **VUs** = callers at once. **RPS** = requests finished per second.
+**p95 / p99** = the 95th and 99th slowest percentiles of one request.
+
 | VUs | RPS | p95 | p99 | Errors | Within 150ms budget |
 |---|---|---|---|---|---|
 | 50 | 1,337 | 68ms | 87ms | 0 | yes |
@@ -58,8 +107,11 @@ sequential on one thread.
 | 150 | **1,591** | 108ms | 179ms | 0 | no |
 | 200 | 1,532 | 170ms | 256ms | 0 | no |
 
-p99 rises monotonically — 87, 101, 128, 179, 256 — and throughput plateaus
-between 1,500 and 1,600 rps. The budget is crossed between 100 and 150.
+**How to read it.** p99 rises steadily down the column — 87, 101, 128, 179, 256 —
+so every caller you add makes the slow requests slower. Throughput stops rising
+around 1,500-1,600 rps: past that, extra concurrency buys nothing and costs
+latency. The budget of 150ms is crossed between 100 and 150 callers, which is
+where the admission limit comes from.
 
 Failures reported by k6 at 150 and 200 (6 and 91 of ~140,000) are a harness
 artifact, not a service fault: the sweep stops the application the moment k6
@@ -79,6 +131,11 @@ should be quoted tightly either.
 
 ### Ramp — `decisions.js`, 10 → 200 VUs over 5m
 
+A **ramp** climbs through concurrency levels in one run rather than holding one:
+10 callers, then 50, then 100, then 200. Good for seeing the overall shape, bad
+for pinning a number, because its single p99 averages every level together —
+which is why the held runs above exist.
+
 371,974 requests, 1,240 rps, zero failures, p99 176ms.
 
 ### Batch — `batch.js`
@@ -97,7 +154,12 @@ Each limit is derived from a number above.
 |---|---|
 | `@Size(max = 500)` on the batch list | 10,000 events is a 35-second request. At ~287 events/s, 500 bounds one request to under two seconds |
 | Explicit Tomcat and Hikari pool sizes | both are defaults nobody chose; they happen to be adequate, which is luck rather than a decision |
-| Admission limit of ~100 in flight, returning 429 | p99 holds at 100 concurrent (128ms) and is gone by 150 (179ms). Beyond it the service exceeds its own budget for every caller rather than turning anyone away |
+| Admission limit of ~100 in flight, returning **429** | p99 holds at 100 concurrent (128ms) and is gone by 150 (179ms). Beyond it the service exceeds its own budget for every caller rather than turning anyone away |
+
+**429** is the HTTP status for "Too Many Requests" — a deliberate "I am busy, try
+again shortly", sent with a `Retry-After` header. It is the opposite of a **500**,
+which says "I broke". A system at capacity should say the first; today this one
+says neither, and just makes everybody wait.
 
 The third is the one this exercise existed to justify. Before measuring, any
 number would have been a guess wearing a decimal point.
@@ -149,6 +211,15 @@ we decide faster".
 ---
 
 ## Method
+
+### The tools
+
+**k6** is the load generator — it sends many requests at once and reports timings.
+Scripts are JavaScript, which is why it can build a fresh UUID per request.
+`ab` (ApacheBench) cannot, which rules it out here.
+
+A **VU** (virtual user) is one simulated client looping requests back to back, so
+"100 VUs" means 100 simultaneous callers, not 100 requests.
 
 ### Why every request needs a fresh event id
 
