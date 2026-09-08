@@ -37,7 +37,7 @@ The rules are live in the sense that matters for learning and inert in the sense
 
 The gap this exposes is tooling, not model. The outcomes are recorded per decision, so "how often would `IP_CARD_SPREAD` have fired last week, and on which transactions?" is a query that can be written — but there is no report, endpoint or dashboard that answers it. Until that exists, promotion out of shadow would rest on someone writing ad-hoc SQL, which is a weaker basis than the mechanism deserves. Building that report is the natural next piece of work, and it is worth more than the next rule.
 
-Promotion itself is also unguarded. Any caller who can change a rule's mode can move a rule from shadow to active in one request, with no second approval and no percentage rollout. That is consistent with the service's stated scope — authentication and authorisation are out of scope — but it means the safety this ADR describes is a convention held up by the seed migration, not a control the system enforces.
+Promotion itself is unguarded. Any caller who can change a rule's mode can move a rule from shadow to active in one request, with no second approval and no percentage rollout. That is consistent with the service's stated scope — authentication and authorisation are out of scope — so there is no identity to require a second of.
 
 ## References
 
@@ -45,3 +45,40 @@ Promotion itself is also unguarded. Any caller who can change a rule's mode can 
 - Databricks, *Payment fraud detection* — https://www.databricks.com/blog/payment-fraud-detection
 - ADR 0005 — data protection, for why device and IP are stored hashed and what that costs the rules
 - ADR 0007 — rules as versioned data, for the mode column these rules rely on
+
+
+---
+
+## Update — 2026-09-08
+
+**This is now enforced on the write path.** The original text conceded that the
+safety described here was "a convention held up by the seed migration, not a
+control the system enforces". `RuleService` enforces it:
+
+| Case | Mode |
+|---|---|
+| A new code | must be **SHADOW** — anything else is a 400 |
+| A new version of an existing code | must keep the mode in force — anything else is a 400 |
+
+The second half matters as much as the first. Creating a version supersedes its
+predecessor, so a version submitted as SHADOW against a rule that is ACTIVE would
+take that rule out of the verdict — a fraud control switched off as a side effect
+of editing a threshold, reported to the caller as a success. Editing a rule and
+changing what it does are separate operations, which is why mode has its own
+endpoint.
+
+Rejected rather than silently corrected, on the same reasoning the page-size limit
+uses: a caller who asked for ACTIVE and was quietly given SHADOW believes the rule
+is deciding when it is only watching.
+
+**What this required, and it is the interesting part.** The rules path had no
+service layer, correctly — the controller validated and the repository wrote, and
+there was nothing in between worth a layer. Enforcing this changes that: deciding
+a new version's mode means reading the version in force and then writing, and a
+read-then-write needs a transaction around it or a concurrent mode change lands
+between the two. `RuleService` exists because the policy arrived, not because the
+pattern called for it.
+
+**Still not enforced:** promotion. Moving a rule out of shadow remains one
+unauthenticated call, and percentage rollout between shadow and active does not
+exist.

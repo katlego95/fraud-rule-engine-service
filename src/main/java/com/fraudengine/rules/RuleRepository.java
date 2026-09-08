@@ -45,6 +45,14 @@ public class RuleRepository {
                 .list();
     }
 
+    /** The version of one rule that is in force now, if the code exists at all. */
+    public Optional<Rule> findCurrentByCode(String code) {
+        return jdbc.sql("select " + COLUMNS + " from rules where code = :code and superseded_at is null")
+                .param("code", code)
+                .query(mapper())
+                .optional();
+    }
+
     public List<Rule> findHistory(String code) {
         return jdbc.sql("select " + COLUMNS + " from rules where code = :code order by version desc")
                 .param("code", code)
